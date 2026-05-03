@@ -1,0 +1,537 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ───────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  CENTRE_ADMIN
+  TEACHER
+  PARENT
+  STUDENT
+}
+
+enum Language {
+  EN
+  BM
+  CN
+}
+
+enum StudentStatus {
+  ACTIVE
+  TRIAL
+  INACTIVE
+  GRADUATED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  FPX
+  DUITNOW
+  CREDIT_CARD
+  CASH
+  BANK_TRANSFER
+}
+
+enum SalaryType {
+  PER_HOUR
+  PER_CLASS
+  MONTHLY
+}
+
+enum SyllabusType {
+  SPM
+  PT3
+  UPSR
+  IGCSE
+  A_LEVEL
+  OTHERS
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  WAITLIST
+  DROPPED
+  COMPLETED
+}
+
+enum ReferralStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum NotificationChannel {
+  WHATSAPP
+  EMAIL
+  PUSH
+  SMS
+}
+
+enum NotificationType {
+  ABSENT_ALERT
+  INVOICE_GENERATED
+  PAYMENT_RECEIVED
+  PAYMENT_OVERDUE
+  CLASS_CANCELLED
+  HOMEWORK_DUE
+  AI_RISK_ALERT
+  REFERRAL_CONFIRMED
+  GENERAL
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ─── USERS & AUTH ────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  phone         String?   @unique
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  role          Role      @default(STUDENT)
+  languagePref  Language  @default(EN)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  student       Student?
+  parent        Parent?
+  teacher       Teacher?
+  sentMessages  Message[]      @relation("SentMessages")
+  notifications Notification[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model OtpCode {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  expires   DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ─── BRANCH ──────────────────────────────────────
+
+model Branch {
+  id        String   @id @default(cuid())
+  name      String
+  address   String
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students  Student[]
+  teachers  Teacher[]
+  classes   Class[]
+  invoices  Invoice[]
+  admins    BranchAdmin[]
+}
+
+model BranchAdmin {
+  id       String @id @default(cuid())
+  userId   String
+  branchId String
+
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@unique([userId, branchId])
+}
+
+// ─── STUDENTS & PARENTS ──────────────────────────
+
+model Student {
+  id        String        @id @default(cuid())
+  userId    String        @unique
+  branchId  String
+  icNumber  String?       @unique
+  school    String?
+  formLevel String?
+  status    StudentStatus @default(ACTIVE)
+  photoUrl  String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch      Branch               @relation(fields: [branchId], references: [id])
+  parents     Parent[]
+  enrollments Enrollment[]
+  attendance  Attendance[]
+  invoices    Invoice[]
+  submissions HomeworkSubmission[]
+  points      StudentPoint[]
+  badges      StudentBadge[]
+  examResults ExamResult[]
+  referralsReceived Referral[]     @relation("ReferredStudent")
+}
+
+model Parent {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  relationship String   @default("Parent")
+  createdAt    DateTime @default(now())
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  children      Student[]
+  referralsMade Referral[] @relation("ReferrerParent")
+}
+
+// ─── TEACHERS ────────────────────────────────────
+
+model Teacher {
+  id            String     @id @default(cuid())
+  userId        String     @unique
+  branchId      String
+  qualification String?
+  salaryType    SalaryType @default(MONTHLY)
+  salaryRate    Float      @default(0)
+  bio           String?
+  isActive      Boolean    @default(true)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch        Branch           @relation(fields: [branchId], references: [id])
+  subjects      TeacherSubject[]
+  classes       Class[]
+  leaveRequests LeaveRequest[]
+}
+
+model TeacherSubject {
+  id        String @id @default(cuid())
+  teacherId String
+  subjectId String
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id])
+
+  @@unique([teacherId, subjectId])
+}
+
+// ─── SUBJECTS & CLASSES ──────────────────────────
+
+model Subject {
+  id           String       @id @default(cuid())
+  name         String
+  level        String?
+  syllabusType SyllabusType @default(SPM)
+  createdAt    DateTime     @default(now())
+
+  teacherSubjects TeacherSubject[]
+  classes         Class[]
+}
+
+model Class {
+  id        String   @id @default(cuid())
+  branchId  String
+  subjectId String
+  teacherId String
+  name      String
+  room      String?
+  capacity  Int      @default(30)
+  dayOfWeek Int?
+  timeStart String?
+  timeEnd   String?
+  feeAmount Float    @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  branch      Branch       @relation(fields: [branchId], references: [id])
+  subject     Subject      @relation(fields: [subjectId], references: [id])
+  teacher     Teacher      @relation(fields: [teacherId], references: [id])
+  enrollments Enrollment[]
+  attendance  Attendance[]
+  homework    Homework[]
+  materials   Material[]
+}
+
+model Enrollment {
+  id           String           @id @default(cuid())
+  studentId    String
+  classId      String
+  enrolledDate DateTime         @default(now())
+  status       EnrollmentStatus @default(ACTIVE)
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classId])
+}
+
+// ─── ATTENDANCE ──────────────────────────────────
+
+model Attendance {
+  id        String           @id @default(cuid())
+  studentId String
+  classId   String
+  date      DateTime         @db.Date
+  status    AttendanceStatus @default(PRESENT)
+  notedBy   String?
+  note      String?
+  createdAt DateTime         @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class   Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, classId, date])
+}
+
+// ─── FEES & PAYMENTS ─────────────────────────────
+
+model Invoice {
+  id        String        @id @default(cuid())
+  studentId String
+  branchId  String
+  month     DateTime
+  amount    Float
+  lateFee   Float         @default(0)
+  dueDate   DateTime
+  status    InvoiceStatus @default(PENDING)
+  notes     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  student  Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  branch   Branch    @relation(fields: [branchId], references: [id])
+  payments Payment[]
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  invoiceId  String
+  amount     Float
+  method     PaymentMethod @default(CASH)
+  reference  String?
+  receiptUrl String?
+  paidAt     DateTime      @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// ─── HOMEWORK & MATERIALS ────────────────────────
+
+model Homework {
+  id          String   @id @default(cuid())
+  classId     String
+  title       String
+  description String?
+  dueDate     DateTime
+  fileUrl     String?
+  createdAt   DateTime @default(now())
+
+  class       Class                @relation(fields: [classId], references: [id], onDelete: Cascade)
+  submissions HomeworkSubmission[]
+}
+
+model HomeworkSubmission {
+  id          String    @id @default(cuid())
+  homeworkId  String
+  studentId   String
+  fileUrl     String?
+  aiFeedback  String?   @db.Text
+  teacherNote String?
+  score       Float?
+  submittedAt DateTime  @default(now())
+  reviewedAt  DateTime?
+
+  homework Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([homeworkId, studentId])
+}
+
+model Material {
+  id         String   @id @default(cuid())
+  classId    String
+  title      String
+  fileUrl    String
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+}
+
+// ─── MESSAGES & NOTIFICATIONS ────────────────────
+
+model Message {
+  id            String   @id @default(cuid())
+  senderId      String
+  recipientType String
+  recipientId   String?
+  content       String   @db.Text
+  isRead        Boolean  @default(false)
+  sentAt        DateTime @default(now())
+
+  sender User @relation("SentMessages", fields: [senderId], references: [id])
+}
+
+model Notification {
+  id      String              @id @default(cuid())
+  userId  String
+  type    NotificationType    @default(GENERAL)
+  title   String
+  content String              @db.Text
+  channel NotificationChannel @default(PUSH)
+  isRead  Boolean             @default(false)
+  sentAt  DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── REFERRALS ───────────────────────────────────
+
+model Referral {
+  id                String         @id @default(cuid())
+  referrerParentId  String
+  referredStudentId String
+  discountAmount    Float          @default(0)
+  status            ReferralStatus @default(PENDING)
+  createdAt         DateTime       @default(now())
+  confirmedAt       DateTime?
+
+  referrerParent  Parent  @relation("ReferrerParent", fields: [referrerParentId], references: [id])
+  referredStudent Student @relation("ReferredStudent", fields: [referredStudentId], references: [id])
+
+  @@unique([referrerParentId, referredStudentId])
+}
+
+// ─── GAMIFICATION ────────────────────────────────
+
+model StudentPoint {
+  id        String   @id @default(cuid())
+  studentId String
+  points    Int
+  reason    String
+  earnedAt  DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model Badge {
+  id          String   @id @default(cuid())
+  name        String
+  description String
+  iconUrl     String?
+  createdAt   DateTime @default(now())
+
+  studentBadges StudentBadge[]
+}
+
+model StudentBadge {
+  id        String   @id @default(cuid())
+  studentId String
+  badgeId   String
+  earnedAt  DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  badge   Badge   @relation(fields: [badgeId], references: [id])
+
+  @@unique([studentId, badgeId])
+}
+
+// ─── TEACHER LEAVE ───────────────────────────────
+
+model LeaveRequest {
+  id         String      @id @default(cuid())
+  teacherId  String
+  dateFrom   DateTime    @db.Date
+  dateTo     DateTime    @db.Date
+  reason     String
+  status     LeaveStatus @default(PENDING)
+  reviewedBy String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+}
+
+// ─── RESULTS ─────────────────────────────────────
+
+model ExamResult {
+  id        String   @id @default(cuid())
+  studentId String
+  classId   String
+  title     String
+  score     Float
+  maxScore  Float    @default(100)
+  examDate  DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+// ─── HOLIDAY CALENDAR ────────────────────────────
+
+model Holiday {
+  id         String   @id @default(cuid())
+  name       String
+  date       DateTime @db.Date
+  isNational Boolean  @default(true)
+  state      String?
+  createdAt  DateTime @default(now())
+}
