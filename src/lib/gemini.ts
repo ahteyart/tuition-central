@@ -25,7 +25,7 @@ export async function chatWithTutor(
   ];
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     contents,
     config: {
       systemInstruction: `You are an expert ${subject} tutor for Malaysian students at the ${level} level. Explain concepts clearly, step-by-step. Use simple English and relate examples to the Malaysian school context (e.g. SPM, PT3 exam formats). Be encouraging, patient and concise. When solving problems, always show your working.`,
@@ -46,7 +46,7 @@ export async function generateAIHomeworkFeedback(
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     contents: `You are a helpful Malaysian school teacher reviewing a student's homework.
 
 Assignment: ${title}
@@ -80,7 +80,7 @@ export async function generateBranchSummary(stats: {
   }
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     contents: `Write a 3-4 sentence professional monthly performance summary for a Malaysian tuition centre manager.
 
 Branch: ${stats.branchName}
